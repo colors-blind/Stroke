@@ -1,5 +1,7 @@
 # Stroke
 
+原始代码 来源于书籍 《Building Open Source Network Security Tools: Components and Techniques》
+
 `Stroke` 是一个基于 `libpcap` 的被动网络监听工具，用于抓取局域网中的以太网数据包，提取源 MAC 地址，并将其映射为厂商（OUI）信息。
 
 项目同时提供了一个辅助工具 `stroker_ace`，可从 IEEE 的 OUI 文本文件生成 `oui.h` 头文件，供 `stroke` 做二分查找匹配。
