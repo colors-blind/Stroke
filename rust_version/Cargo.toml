@@ -1,0 +1,30 @@
+[package]
+name = "stroke-rs"
+version = "1.1.0"
+edition = "2021"
+authors = ["Mike D. Schiffman <mike@infonexus.com>", "Rust Port"]
+description = "A passive MAC to OUI mapping tool using libpcap"
+license = "BSD-2-Clause"
+
+[dependencies]
+# libpcap bindings - 用于数据包捕获
+pcap = "1.0"
+
+# 命令行参数解析
+clap = { version = "4.0", features = ["derive"] }
+
+# 原子引用计数，用于跨线程共享状态
+# 在捕获循环和信号处理之间共享
+parking_lot = "0.12"
+
+# 信号处理
+ctrlc = "3.0"
+
+# 以太网帧解析
+etherparse = "0.13"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
