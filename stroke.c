@@ -96,44 +96,44 @@ static const struct option long_options[] = {
  * 打印版本信息
  */
 static void print_version(void) {
-    printf("Stroke version %d.%d.%d\n",
+    fprintf(stdout, "Stroke version %d.%d.%d\n",
            STROKE_VERSION_MAJOR,
            STROKE_VERSION_MINOR,
            STROKE_VERSION_PATCH);
-    printf("A passive MAC to OUI mapping tool using libpcap\n");
-    printf("\n");
-    printf("Copyright (c) 2002 Mike D. Schiffman <mike@infonexus.com>\n");
-    printf("All rights reserved.\n");
-    printf("This software is released under the BSD License.\n");
+    fprintf(stdout, "A passive MAC to OUI mapping tool using libpcap\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Copyright (c) 2002 Mike D. Schiffman <mike@infonexus.com>\n");
+    fprintf(stdout, "All rights reserved.\n");
+    fprintf(stdout, "This software is released under the BSD License.\n");
 }
 
 /*
  * 打印帮助信息
  */
 static void print_help(const char *prog_name) {
-    printf("Usage: %s [OPTIONS]\n", prog_name);
-    printf("\n");
-    printf("Passively capture and map MAC addresses to OUI vendors.\n");
-    printf("\n");
-    printf("Options:\n");
-    printf("  -h, --help              Show this help message and exit\n");
-    printf("  -v, --version           Show version information and exit\n");
-    printf("  -l, --list              List all available network devices and exit\n");
-    printf("  -i, --interface <name>  Specify the network interface to capture from\n");
-    printf("                            (e.g., eth0, enp3s0, wlan0)\n");
-    printf("  -I, --show-ip           Show source IP addresses along with MAC addresses\n");
-    printf("\n");
-    printf("Examples:\n");
-    printf("  %s -l                      List all available interfaces\n", prog_name);
-    printf("  %s -i eth0                 Capture on eth0\n", prog_name);
-    printf("  %s -I -i wlan0             Capture on wlan0 with IP addresses\n", prog_name);
-    printf("  %s                         Auto-select first available interface\n", prog_name);
-    printf("\n");
-    printf("Notes:\n");
-    printf("  - Root privileges are usually required for packet capture\n");
-    printf("  - Press Ctrl+C to stop capturing and view statistics\n");
-    printf("  - Use --list to see available interface names\n");
-    printf("  - OUI lookup is performed using IEEE Organizationally Unique Identifier table\n");
+    fprintf(stdout, "Usage: %s [OPTIONS]\n", prog_name);
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Passively capture and map MAC addresses to OUI vendors.\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Options:\n");
+    fprintf(stdout, "  -h, --help              Show this help message and exit\n");
+    fprintf(stdout, "  -v, --version           Show version information and exit\n");
+    fprintf(stdout, "  -l, --list              List all available network devices and exit\n");
+    fprintf(stdout, "  -i, --interface <name>  Specify the network interface to capture from\n");
+    fprintf(stdout, "                            (e.g., eth0, enp3s0, wlan0)\n");
+    fprintf(stdout, "  -I, --show-ip           Show source IP addresses along with MAC addresses\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Examples:\n");
+    fprintf(stdout, "  %s -l                      List all available interfaces\n", prog_name);
+    fprintf(stdout, "  %s -i eth0                 Capture on eth0\n", prog_name);
+    fprintf(stdout, "  %s -I -i wlan0             Capture on wlan0 with IP addresses\n", prog_name);
+    fprintf(stdout, "  %s                         Auto-select first available interface\n", prog_name);
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Notes:\n");
+    fprintf(stdout, "  - Root privileges are usually required for packet capture\n");
+    fprintf(stdout, "  - Press Ctrl+C to stop capturing and view statistics\n");
+    fprintf(stdout, "  - Use --list to see available interface names\n");
+    fprintf(stdout, "  - OUI lookup is performed using IEEE Organizationally Unique Identifier table\n");
 }
 
 /*
@@ -145,9 +145,9 @@ static int list_devices(void) {
     char errbuf[PCAP_ERRBUF_SIZE];
     int count = 0;
 
-    printf("Available Network Interfaces:\n");
-    printf("============================\n");
-    printf("\n");
+    fprintf(stdout, "Available Network Interfaces:\n");
+    fprintf(stdout, "============================\n");
+    fprintf(stdout, "\n");
 
     if (pcap_findalldevs(&alldevs, errbuf) == -1) {
         print_error(EXIT_IOERR, "Failed to enumerate network devices", errbuf);
@@ -155,9 +155,9 @@ static int list_devices(void) {
     }
 
     if (alldevs == NULL) {
-        printf("  No network devices found.\n");
-        printf("\n");
-        printf("Hint: Try running with root privileges (sudo).\n");
+        fprintf(stdout, "  No network devices found.\n");
+        fprintf(stdout, "\n");
+        fprintf(stdout, "Hint: Try running with root privileges (sudo).\n");
         pcap_freealldevs(alldevs);
         return EXIT_OK;
     }
@@ -167,61 +167,61 @@ static int list_devices(void) {
         count++;
         
         /* 打印设备名称 */
-        printf("  %d. %s", count, dev->name);
+        fprintf(stdout, "  %d. %s", count, dev->name);
         
         /* 标记默认选择的设备（第一个非回环设备） */
         if ((dev->flags & PCAP_IF_LOOPBACK) == 0 && first_non_loopback) {
-            printf(" [default]");
+            fprintf(stdout, " [default]");
             first_non_loopback = 0;
         }
         
-        printf("\n");
+        fprintf(stdout, "\n");
 
         /* 打印设备描述（如果有） */
         if (dev->description != NULL) {
-            printf("      Description: %s\n", dev->description);
+            fprintf(stdout, "      Description: %s\n", dev->description);
         }
 
         /* 打印设备标志 */
-        printf("      Flags: ");
+        fprintf(stdout, "      Flags: ");
         int first = 1;
         if (dev->flags & PCAP_IF_LOOPBACK) {
-            printf("loopback");
+            fprintf(stdout, "loopback");
             first = 0;
         }
         if (dev->flags & PCAP_IF_UP) {
-            if (!first) printf(", ");
-            printf("up");
+            if (!first) fprintf(stdout, ", ");
+            fprintf(stdout, "up");
             first = 0;
         }
         if (dev->flags & PCAP_IF_RUNNING) {
-            if (!first) printf(", ");
-            printf("running");
+            if (!first) fprintf(stdout, ", ");
+            fprintf(stdout, "running");
             first = 0;
         }
         if (first) {
-            printf("none");
+            fprintf(stdout, "none");
         }
-        printf("\n");
+        fprintf(stdout, "\n");
 
         /* 打印地址（如果有） */
         if (dev->addresses != NULL) {
-            printf("      Addresses:\n");
+            fprintf(stdout, "      Addresses:\n");
             for (pcap_addr_t *addr = dev->addresses; addr != NULL; addr = addr->next) {
                 if (addr->addr != NULL && addr->addr->sa_family == AF_INET) {
                     struct sockaddr_in *sin = (struct sockaddr_in *)addr->addr;
-                    printf("        IPv4: %s\n", inet_ntoa(sin->sin_addr));
+                    fprintf(stdout, "        IPv4: %s\n", inet_ntoa(sin->sin_addr));
                 }
             }
         }
-        printf("\n");
+        fprintf(stdout, "\n");
     }
 
-    printf("============================\n");
-    printf("Total: %d device(s)\n", count);
-    printf("\n");
-    printf("Usage example:\n");
-    printf("  %s -i <interface_name>\n", "stroke");
+    fprintf(stdout, "============================\n");
+    fprintf(stdout, "Total: %d device(s)\n", count);
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Usage example:\n");
+    fprintf(stdout, "  %s -i <interface_name>\n", "stroke");
 
     pcap_freealldevs(alldevs);
     return EXIT_OK;
@@ -333,20 +333,20 @@ int main(int argc, char **argv) {
     /*
      * 打印启动横幅
      */
-    printf("Stroke %d.%d.%d\n",
+    fprintf(stdout, "Stroke %d.%d.%d\n",
            STROKE_VERSION_MAJOR,
            STROKE_VERSION_MINOR,
            STROKE_VERSION_PATCH);
-    printf("A passive MAC to OUI mapping tool\n");
-    printf("================================\n");
-    printf("\n");
-    printf("Configuration:\n");
-    printf("  Mode:         %s\n", print_ip ? "MAC + IP" : "MAC only");
-    printf("  Interface:    ");
+    fprintf(stdout, "A passive MAC to OUI mapping tool\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Configuration:\n");
+    fprintf(stdout, "  Mode:         %s\n", print_ip ? "MAC + IP" : "MAC only");
+    fprintf(stdout, "  Interface:    ");
 
     /* 如果用户没有指定设备，自动查找可用的网络设备 */
     if (device == NULL) {
-        printf("[auto-selecting]\n");
+        fprintf(stdout, "[auto-selecting]\n");
         
         if (pcap_findalldevs(&alldevs, errbuf) == -1) {
             print_error(EXIT_IOERR, "Failed to enumerate network devices", errbuf);
@@ -386,12 +386,12 @@ int main(int argc, char **argv) {
                     }
                     device = device_buffer;
                     found = 1;
-                    printf("\n");
-                    printf("  Selected:     %s", device);
+                    fprintf(stdout, "\n");
+                    fprintf(stdout, "  Selected:     %s", device);
                     if (dev->description != NULL) {
-                        printf(" (%s)", dev->description);
+                        fprintf(stdout, " (%s)", dev->description);
                     }
-                    printf("\n");
+                    fprintf(stdout, "\n");
                 }
                 break;
             }
@@ -407,11 +407,11 @@ int main(int argc, char **argv) {
                 device_buffer[sizeof(device_buffer) - 1] = '\0';
             }
             device = device_buffer;
-            printf("\n");
-            printf("  Selected:     %s (loopback)\n", device);
+            fprintf(stdout, "\n");
+            fprintf(stdout, "  Selected:     %s (loopback)\n", device);
         }
     } else {
-        printf("%s\n", device);
+        fprintf(stdout, "%s\n", device);
     }
 
     /*
@@ -427,11 +427,11 @@ int main(int argc, char **argv) {
         return EXIT_NOINPUT;
     }
 
-    printf("\n");
-    printf("Starting packet capture...\n");
-    printf("Press Ctrl+C to stop and view statistics.\n");
-    printf("================================\n");
-    printf("\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Starting packet capture...\n");
+    fprintf(stdout, "Press Ctrl+C to stop and view statistics.\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "\n");
 
     /*
      * 打开数据包捕获设备，参数说明：
@@ -586,12 +586,12 @@ int main(int argc, char **argv) {
              * 我们将MAC提交给二分查找函数，该函数将返回与MAC条目对应的OUI字符串。
              */
             if (print_ip) {
-                printf("%s @ %s -> %s\n", 
+                fprintf(stdout, "%s @ %s -> %s\n", 
                        eprintf((u_char *)packet),
                        iprintf((u_char *)packet + 26),
                        b_search((u_char *)packet + 6));
             } else {
-                printf("%s -> %s\n", 
+                fprintf(stdout, "%s -> %s\n", 
                        eprintf((u_char *)packet),
                        b_search((u_char *)packet + 6));
             }
@@ -602,11 +602,11 @@ int main(int argc, char **argv) {
      * 如果执行到这里，说明用户在命令提示符下按下了ctrl-c，
      * 现在是时候输出统计信息了。
      */
-    printf("\n");
-    printf("================================\n");
-    printf("Capture Stopped. Statistics:\n");
-    printf("================================\n");
-    printf("\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "Capture Stopped. Statistics:\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "\n");
 
     struct pcap_stat ps;
     if (pcap_stats(p, &ps) == -1) {
@@ -617,15 +617,15 @@ int main(int argc, char **argv) {
          * 注意，ps统计信息根据底层架构可能略有不同。
          * 这里我们简化处理。
          */
-        printf("  Packet Statistics:\n");
-        printf("    Received by libpcap: %15d\n", ps.ps_recv);
-        printf("    Dropped by libpcap:  %15d\n", ps.ps_drop);
-        printf("\n");
+        fprintf(stdout, "  Packet Statistics:\n");
+        fprintf(stdout, "    Received by libpcap: %15d\n", ps.ps_recv);
+        fprintf(stdout, "    Dropped by libpcap:  %15d\n", ps.ps_drop);
+        fprintf(stdout, "\n");
     }
 
-    printf("  Discovery Statistics:\n");
-    printf("    Unique MAC addresses: %14lu\n", (unsigned long)mac);
-    printf("\n");
+    fprintf(stdout, "  Discovery Statistics:\n");
+    fprintf(stdout, "    Unique MAC addresses: %14lu\n", (unsigned long)mac);
+    fprintf(stdout, "\n");
 
     /*
      * [安全修复] 释放哈希表内存
@@ -1060,16 +1060,16 @@ void cleanup(int signo) {
      * [安全修复] 只修改 volatile sig_atomic_t 变量
      * 
      * 原来的代码：
-     *     printf("Interrupt signal caught...\n");  // 不安全！
+     *     fprintf(stdout, "Interrupt signal caught...\n");  // 不安全！
      * 
      * 问题：
-     * printf() 不是异步信号安全函数！
+     * fprintf(stdout, ) 不是异步信号安全函数！
      * 
-     * 为什么不能在信号处理函数中调用 printf()：
-     * 1. printf() 使用缓冲区，可能需要分配内存
-     * 2. 如果信号在 printf() 执行过程中到达，可能会导致死锁
+     * 为什么不能在信号处理函数中调用 fprintf(stdout, )：
+     * 1. fprintf(stdout, ) 使用缓冲区，可能需要分配内存
+     * 2. 如果信号在 fprintf(stdout, ) 执行过程中到达，可能会导致死锁
      * 3. 信号处理函数可以在任何时间、任何上下文中执行
-     * 4. printf() 内部使用的锁可能已经被持有
+     * 4. fprintf(stdout, ) 内部使用的锁可能已经被持有
      * 
      * C标准规定（C11 7.14.1.1）：
      * 信号处理函数只能调用以下函数：
@@ -1102,11 +1102,11 @@ void cleanup(int signo) {
      * - timer_gettime(), timer_settime(), times(), umask(), uname()
      * - unlink(), utime(), wait(), waitpid(), write()
      * 
-     * 但注意：printf() 不在列表中！
+     * 但注意：fprintf(stdout, ) 不在列表中！
      * 
      * 修复方案：
      * 1. 只设置 loop = 0（这是安全的，因为 loop 是 volatile sig_atomic_t）
-     * 2. 不要调用 printf() 或其他非异步信号安全函数
+     * 2. 不要调用 fprintf(stdout, ) 或其他非异步信号安全函数
      * 
      * 我们可以在 main() 函数中检测 loop 变为 0 后再输出消息
      */
@@ -1115,7 +1115,7 @@ void cleanup(int signo) {
     
     /*
      * [安全注意] 
-     * 原来的 printf() 调用已被移除，因为它不是异步信号安全的
+     * 原来的 fprintf(stdout, ) 调用已被移除，因为它不是异步信号安全的
      * 
      * 如果确实需要在信号处理中输出消息，可以使用 write()：
      * 
