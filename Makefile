@@ -5,8 +5,8 @@
 #   All rights reserved.
 
 srcdir		= .
-CC		= gcc -g
-CFLAGS		= -O2 -Wall
+CC		= gcc
+CFLAGS		= -std=c99 -O2 -Wall -Wextra -Wpedantic -Wshadow -Wconversion
 #LDFLAGS	= -L/path/to/libpcap/library/if/needed
 OBJECTS_S       = stroke.o
 OBJECTS_SA      = stroker_ace.o
