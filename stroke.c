@@ -47,6 +47,7 @@ int main(int argc, char **argv) {
     bpf_u_int32 local_net, netmask;
     struct table_entry *hash_table[HASH_TABLE_SIZE];
     pcap_if_t *alldevs = NULL;
+    char device_buffer[256] = {0};
 
     /* 解析命令行参数 */
     while ((c = getopt(argc, argv, "Ii:")) != -1) {
@@ -77,8 +78,27 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         
-        device = alldevs->name;
-        printf("Using device: %s\n", device);
+        /* 遍历设备列表，跳过回环接口，选择第一个可用的物理接口 */
+        pcap_if_t *dev;
+        for (dev = alldevs; dev != NULL; dev = dev->next) {
+            /* 跳过回环接口 */
+            if ((dev->flags & PCAP_IF_LOOPBACK) == 0) {
+                /* 复制设备名称到本地缓冲区 */
+                strncpy(device_buffer, dev->name, sizeof(device_buffer) - 1);
+                device_buffer[sizeof(device_buffer) - 1] = '\0';
+                device = device_buffer;
+                printf("Using device: %s\n", device);
+                break;
+            }
+        }
+        
+        /* 如果没有找到非回环接口，使用第一个设备 */
+        if (device == NULL) {
+            strncpy(device_buffer, alldevs->name, sizeof(device_buffer) - 1);
+            device_buffer[sizeof(device_buffer) - 1] = '\0';
+            device = device_buffer;
+            printf("Using device: %s\n", device);
+        }
     }
 
     /*
@@ -101,9 +121,10 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    /* 释放设备列表 */
+    /* 释放设备列表 - 现在可以安全释放，因为device指向本地缓冲区 */
     if (alldevs != NULL) {
         pcap_freealldevs(alldevs);
+        alldevs = NULL;
     }
 
     /*
