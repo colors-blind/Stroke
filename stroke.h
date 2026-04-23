@@ -53,9 +53,8 @@
 #define HASH_TABLE_SIZE 251
 
 /* 哈希表条目结构 */
-struct table_entry
-{
-    u_char mac[6];          /* 存储MAC地址 */
+struct table_entry {
+    u_char mac[6];              /* 存储MAC地址 */
     struct table_entry *next;   /* 指向链表中下一个条目 */
 };
 
