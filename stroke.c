@@ -31,6 +31,37 @@
  */
 
 #include "./stroke.h"
+#include <getopt.h>
+#include <arpa/inet.h>
+
+/*
+ * 版本信息
+ * 遵循语义化版本控制 (Semantic Versioning)
+ * MAJOR.MINOR.PATCH
+ */
+#define STROKE_VERSION_MAJOR 1
+#define STROKE_VERSION_MINOR 1
+#define STROKE_VERSION_PATCH 0
+
+/*
+ * 规范化退出码
+ * 遵循 POSIX 标准和常见约定
+ */
+typedef enum {
+    EXIT_OK          = 0,   /* 成功 */
+    EXIT_USAGE       = 64,  /* 命令行使用错误 */
+    EXIT_DATAERR     = 65,  /* 数据格式错误 */
+    EXIT_NOINPUT     = 66,  /* 无法打开输入 */
+    EXIT_UNAVAILABLE = 69,  /* 服务不可用 */
+    EXIT_SOFTWARE    = 70,  /* 内部软件错误 */
+    EXIT_OSERR       = 71,  /* 操作系统错误 */
+    EXIT_CANTCREAT   = 73,  /* 无法创建输出 */
+    EXIT_IOERR       = 74,  /* 输入/输出错误 */
+    EXIT_TEMPFAIL    = 75,  /* 临时失败 */
+    EXIT_PROTOCOL    = 76,  /* 协议错误 */
+    EXIT_NOPERM      = 77,  /* 权限不足 */
+    EXIT_CONFIG      = 78   /* 配置错误 */
+} ExitCode;
 
 /*
  * [安全修复] 循环控制标志
@@ -43,12 +74,203 @@ static u_long mac = 0;
 
 /* 函数声明 */
 static void ht_free_table(struct table_entry **hash_table);
+static void print_version(void);
+static void print_help(const char *prog_name);
+static int list_devices(void);
+static void print_error(ExitCode code, const char *message, const char *detail);
+
+/*
+ * 长选项定义
+ * 用于 getopt_long
+ */
+static const struct option long_options[] = {
+    {"help",          no_argument,       NULL, 'h'},
+    {"version",       no_argument,       NULL, 'v'},
+    {"list",          no_argument,       NULL, 'l'},
+    {"interface",     required_argument, NULL, 'i'},
+    {"show-ip",       no_argument,       NULL, 'I'},
+    {NULL, 0, NULL, 0}
+};
+
+/*
+ * 打印版本信息
+ */
+static void print_version(void) {
+    fprintf(stdout, "Stroke version %d.%d.%d\n",
+           STROKE_VERSION_MAJOR,
+           STROKE_VERSION_MINOR,
+           STROKE_VERSION_PATCH);
+    fprintf(stdout, "A passive MAC to OUI mapping tool using libpcap\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Copyright (c) 2002 Mike D. Schiffman <mike@infonexus.com>\n");
+    fprintf(stdout, "All rights reserved.\n");
+    fprintf(stdout, "This software is released under the BSD License.\n");
+}
+
+/*
+ * 打印帮助信息
+ */
+static void print_help(const char *prog_name) {
+    fprintf(stdout, "Usage: %s [OPTIONS]\n", prog_name);
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Passively capture and map MAC addresses to OUI vendors.\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Options:\n");
+    fprintf(stdout, "  -h, --help              Show this help message and exit\n");
+    fprintf(stdout, "  -v, --version           Show version information and exit\n");
+    fprintf(stdout, "  -l, --list              List all available network devices and exit\n");
+    fprintf(stdout, "  -i, --interface <name>  Specify the network interface to capture from\n");
+    fprintf(stdout, "                            (e.g., eth0, enp3s0, wlan0)\n");
+    fprintf(stdout, "  -I, --show-ip           Show source IP addresses along with MAC addresses\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Examples:\n");
+    fprintf(stdout, "  %s -l                      List all available interfaces\n", prog_name);
+    fprintf(stdout, "  %s -i eth0                 Capture on eth0\n", prog_name);
+    fprintf(stdout, "  %s -I -i wlan0             Capture on wlan0 with IP addresses\n", prog_name);
+    fprintf(stdout, "  %s                         Auto-select first available interface\n", prog_name);
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Notes:\n");
+    fprintf(stdout, "  - Root privileges are usually required for packet capture\n");
+    fprintf(stdout, "  - Press Ctrl+C to stop capturing and view statistics\n");
+    fprintf(stdout, "  - Use --list to see available interface names\n");
+    fprintf(stdout, "  - OUI lookup is performed using IEEE Organizationally Unique Identifier table\n");
+}
+
+/*
+ * 列出所有可用的网络设备
+ * 返回值: 0 成功, 非零 失败
+ */
+static int list_devices(void) {
+    pcap_if_t *alldevs;
+    char errbuf[PCAP_ERRBUF_SIZE];
+    int count = 0;
+
+    fprintf(stdout, "Available Network Interfaces:\n");
+    fprintf(stdout, "============================\n");
+    fprintf(stdout, "\n");
+
+    if (pcap_findalldevs(&alldevs, errbuf) == -1) {
+        print_error(EXIT_IOERR, "Failed to enumerate network devices", errbuf);
+        return EXIT_IOERR;
+    }
+
+    if (alldevs == NULL) {
+        fprintf(stdout, "  No network devices found.\n");
+        fprintf(stdout, "\n");
+        fprintf(stdout, "Hint: Try running with root privileges (sudo).\n");
+        pcap_freealldevs(alldevs);
+        return EXIT_OK;
+    }
+
+    int first_non_loopback = 1;
+    for (pcap_if_t *dev = alldevs; dev != NULL; dev = dev->next) {
+        count++;
+        
+        /* 打印设备名称 */
+        fprintf(stdout, "  %d. %s", count, dev->name);
+        
+        /* 标记默认选择的设备（第一个非回环设备） */
+        if ((dev->flags & PCAP_IF_LOOPBACK) == 0 && first_non_loopback) {
+            fprintf(stdout, " [default]");
+            first_non_loopback = 0;
+        }
+        
+        fprintf(stdout, "\n");
+
+        /* 打印设备描述（如果有） */
+        if (dev->description != NULL) {
+            fprintf(stdout, "      Description: %s\n", dev->description);
+        }
+
+        /* 打印设备标志 */
+        fprintf(stdout, "      Flags: ");
+        int first = 1;
+        if (dev->flags & PCAP_IF_LOOPBACK) {
+            fprintf(stdout, "loopback");
+            first = 0;
+        }
+        if (dev->flags & PCAP_IF_UP) {
+            if (!first) fprintf(stdout, ", ");
+            fprintf(stdout, "up");
+            first = 0;
+        }
+        if (dev->flags & PCAP_IF_RUNNING) {
+            if (!first) fprintf(stdout, ", ");
+            fprintf(stdout, "running");
+            first = 0;
+        }
+        if (first) {
+            fprintf(stdout, "none");
+        }
+        fprintf(stdout, "\n");
+
+        /* 打印地址（如果有） */
+        if (dev->addresses != NULL) {
+            fprintf(stdout, "      Addresses:\n");
+            for (pcap_addr_t *addr = dev->addresses; addr != NULL; addr = addr->next) {
+                if (addr->addr != NULL && addr->addr->sa_family == AF_INET) {
+                    struct sockaddr_in *sin = (struct sockaddr_in *)addr->addr;
+                    fprintf(stdout, "        IPv4: %s\n", inet_ntoa(sin->sin_addr));
+                }
+            }
+        }
+        fprintf(stdout, "\n");
+    }
+
+    fprintf(stdout, "============================\n");
+    fprintf(stdout, "Total: %d device(s)\n", count);
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Usage example:\n");
+    fprintf(stdout, "  %s -i <interface_name>\n", "stroke");
+
+    pcap_freealldevs(alldevs);
+    return EXIT_OK;
+}
+
+/*
+ * 打印格式化的错误信息
+ * 参数:
+ *   code:    退出码
+ *   message: 错误概述
+ *   detail:  详细错误信息（可为 NULL）
+ */
+static void print_error(ExitCode code, const char *message, const char *detail) {
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Error: %s\n", message);
+    
+    if (detail != NULL && detail[0] != '\0') {
+        fprintf(stderr, "       %s\n", detail);
+    }
+    
+    fprintf(stderr, "\n");
+    
+    /* 根据错误类型提供建议 */
+    switch (code) {
+        case EXIT_USAGE:
+            fprintf(stderr, "Hint: Use --help for usage information.\n");
+            break;
+        case EXIT_NOPERM:
+            fprintf(stderr, "Hint: Try running with root privileges (sudo).\n");
+            break;
+        case EXIT_NOINPUT:
+            fprintf(stderr, "Hint: Use --list to see available interfaces.\n");
+            break;
+        case EXIT_UNAVAILABLE:
+            fprintf(stderr, "Hint: The interface may be down or not connected.\n");
+            break;
+        default:
+            break;
+    }
+    fprintf(stderr, "\n");
+}
 
 int main(int argc, char **argv) {
     int c;
+    int opt_index;
     pcap_t *p = NULL;
     char *device = NULL;
     int print_ip = 0;
+    int list_only = 0;
     char errbuf[PCAP_ERRBUF_SIZE];
     struct bpf_program filter_code;
     bpf_u_int32 local_net, netmask;
@@ -56,28 +278,79 @@ int main(int argc, char **argv) {
     pcap_if_t *alldevs = NULL;
     char device_buffer[256] = {0};
 
-    /* 解析命令行参数 */
-    while ((c = getopt(argc, argv, "Ii:")) != -1) {
+    /*
+     * 解析命令行参数
+     * 使用 getopt_long 支持长选项
+     */
+    while ((c = getopt_long(argc, argv, "hvli:I", long_options, &opt_index)) != -1) {
         switch (c) {
-            case 'I':
-                print_ip = 1;
+            case 'h':
+                print_help(argv[0]);
+                return EXIT_OK;
+            
+            case 'v':
+                print_version();
+                return EXIT_OK;
+            
+            case 'l':
+                list_only = 1;
                 break;
+            
             case 'i':
                 device = optarg;
                 break;
+            
+            case 'I':
+                print_ip = 1;
+                break;
+            
+            case '?':
+                /* 未知选项，getopt_long 已打印错误信息 */
+                fprintf(stderr, "\n");
+                fprintf(stderr, "Hint: Use --help for usage information.\n");
+                return EXIT_USAGE;
+            
             default:
-                exit(EXIT_FAILURE);
+                return EXIT_USAGE;
         }
     }
 
-    printf("Stroke 1.0 [passive MAC -> OUI mapping tool]\n");
-    printf("<ctrl-c> to quit\n");
+    /*
+     * 如果只需要列出设备
+     */
+    if (list_only) {
+        return list_devices();
+    }
+
+    /*
+     * 检查是否有多余的参数
+     */
+    if (optind < argc) {
+        print_error(EXIT_USAGE, "Unexpected arguments", argv[optind]);
+        return EXIT_USAGE;
+    }
+
+    /*
+     * 打印启动横幅
+     */
+    fprintf(stdout, "Stroke %d.%d.%d\n",
+           STROKE_VERSION_MAJOR,
+           STROKE_VERSION_MINOR,
+           STROKE_VERSION_PATCH);
+    fprintf(stdout, "A passive MAC to OUI mapping tool\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Configuration:\n");
+    fprintf(stdout, "  Mode:         %s\n", print_ip ? "MAC + IP" : "MAC only");
+    fprintf(stdout, "  Interface:    ");
 
     /* 如果用户没有指定设备，自动查找可用的网络设备 */
     if (device == NULL) {
+        fprintf(stdout, "[auto-selecting]\n");
+        
         if (pcap_findalldevs(&alldevs, errbuf) == -1) {
-            fprintf(stderr, "pcap_findalldevs() failed: %s\n", errbuf);
-            exit(EXIT_FAILURE);
+            print_error(EXIT_IOERR, "Failed to enumerate network devices", errbuf);
+            return EXIT_IOERR;
         }
         
         /*
@@ -85,12 +358,15 @@ int main(int argc, char **argv) {
          * 防止 alldevs 为 NULL 时访问 dev->name 导致崩溃
          */
         if (alldevs == NULL) {
-            fprintf(stderr, "No network devices found.\n");
-            exit(EXIT_FAILURE);
+            print_error(EXIT_NOINPUT, "No network devices found", 
+                       "Hint: Use --list to see available interfaces, or try running with sudo.");
+            pcap_freealldevs(alldevs);
+            return EXIT_NOINPUT;
         }
         
         /* 遍历设备列表，跳过回环接口，选择第一个可用的物理接口 */
         pcap_if_t *dev;
+        int found = 0;
         for (dev = alldevs; dev != NULL; dev = dev->next) {
             /* 跳过回环接口 */
             if ((dev->flags & PCAP_IF_LOOPBACK) == 0) {
@@ -109,14 +385,20 @@ int main(int argc, char **argv) {
                         device_buffer[sizeof(device_buffer) - 1] = '\0';
                     }
                     device = device_buffer;
-                    printf("Using device: %s\n", device);
+                    found = 1;
+                    fprintf(stdout, "\n");
+                    fprintf(stdout, "  Selected:     %s", device);
+                    if (dev->description != NULL) {
+                        fprintf(stdout, " (%s)", dev->description);
+                    }
+                    fprintf(stdout, "\n");
                 }
                 break;
             }
         }
         
         /* 如果没有找到非回环接口，使用第一个设备 */
-        if (device == NULL && alldevs->name != NULL) {
+        if (!found && alldevs->name != NULL) {
             size_t name_len = strlen(alldevs->name);
             if (name_len < sizeof(device_buffer)) {
                 memcpy(device_buffer, alldevs->name, name_len + 1);
@@ -125,8 +407,11 @@ int main(int argc, char **argv) {
                 device_buffer[sizeof(device_buffer) - 1] = '\0';
             }
             device = device_buffer;
-            printf("Using device: %s\n", device);
+            fprintf(stdout, "\n");
+            fprintf(stdout, "  Selected:     %s (loopback)\n", device);
         }
+    } else {
+        fprintf(stdout, "%s\n", device);
     }
 
     /*
@@ -134,12 +419,19 @@ int main(int argc, char **argv) {
      * 确保 device 不为空后再使用
      */
     if (device == NULL) {
-        fprintf(stderr, "No valid network device specified or found.\n");
+        print_error(EXIT_NOINPUT, "No valid network device specified or found",
+                   "Use --list to see available interfaces.");
         if (alldevs != NULL) {
             pcap_freealldevs(alldevs);
         }
-        exit(EXIT_FAILURE);
+        return EXIT_NOINPUT;
     }
+
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Starting packet capture...\n");
+    fprintf(stdout, "Press Ctrl+C to stop and view statistics.\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "\n");
 
     /*
      * 打开数据包捕获设备，参数说明：
@@ -154,11 +446,11 @@ int main(int argc, char **argv) {
      */
     p = pcap_open_live(device, SNAPLEN, PROMISC, TIMEOUT, errbuf);
     if (p == NULL) {
-        fprintf(stderr, "pcap_open_live() failed: %s\n", errbuf);
+        print_error(EXIT_UNAVAILABLE, "Failed to open network interface", errbuf);
         if (alldevs != NULL) {
             pcap_freealldevs(alldevs);
         }
-        exit(EXIT_FAILURE);
+        return EXIT_UNAVAILABLE;
     }
 
     /* 释放设备列表 - 现在可以安全释放，因为device指向本地缓冲区 */
@@ -171,22 +463,27 @@ int main(int argc, char **argv) {
      * 设置BPF过滤器。我们只对IP数据包感兴趣，可以忽略其他类型的数据包。
      */
     if (pcap_lookupnet(device, &local_net, &netmask, errbuf) == -1) {
-        fprintf(stderr, "pcap_lookupnet() failed: %s\n", errbuf);
-        pcap_close(p);
-        exit(EXIT_FAILURE);
+        /*
+         * 注意：pcap_lookupnet 可能在某些接口上失败
+         * 这不是致命错误，我们可以使用默认值继续
+         */
+        fprintf(stderr, "Warning: %s\n", errbuf);
+        fprintf(stderr, "Using default values for netmask.\n");
+        local_net = 0;
+        netmask = 0;
     }
     
     if (pcap_compile(p, &filter_code, FILTER, 1, netmask) == -1) {
-        fprintf(stderr, "pcap_compile() failed: %s\n", pcap_geterr(p));
+        print_error(EXIT_PROTOCOL, "Failed to compile BPF filter", pcap_geterr(p));
         pcap_close(p);
-        exit(EXIT_FAILURE);
+        return EXIT_PROTOCOL;
     }
     
     if (pcap_setfilter(p, &filter_code) == -1) {
-        fprintf(stderr, "pcap_setfilter() failed: %s\n", pcap_geterr(p));
+        print_error(EXIT_PROTOCOL, "Failed to set BPF filter", pcap_geterr(p));
         pcap_freecode(&filter_code);
         pcap_close(p);
-        exit(EXIT_FAILURE);
+        return EXIT_PROTOCOL;
     }
     
     /*
@@ -199,9 +496,10 @@ int main(int argc, char **argv) {
      * 确保这是以太网。DLT_EN10MB指定标准的10MB及以上以太网。
      */
     if (pcap_datalink(p) != DLT_EN10MB) {
-        fprintf(stderr, "Stroke only works with ethernet.\n");
+        print_error(EXIT_PROTOCOL, "Unsupported link layer type",
+                   "Stroke only works with Ethernet (DLT_EN10MB).");
         pcap_close(p);
-        exit(EXIT_FAILURE);
+        return EXIT_PROTOCOL;
     }
 
     /*
@@ -209,9 +507,9 @@ int main(int argc, char **argv) {
      * 我们应该在退出前清理内存并释放哈希表。
      */
     if (catch_sig(SIGINT, cleanup) == -1) {
-        fprintf(stderr, "can't catch signal.\n");
+        print_error(EXIT_SOFTWARE, "Failed to set up signal handler", NULL);
         pcap_close(p);
-        exit(EXIT_FAILURE);
+        return EXIT_SOFTWARE;
     }
 
     /*
@@ -288,12 +586,12 @@ int main(int argc, char **argv) {
              * 我们将MAC提交给二分查找函数，该函数将返回与MAC条目对应的OUI字符串。
              */
             if (print_ip) {
-                printf("%s @ %s -> %s\n", 
+                fprintf(stdout, "%s @ %s -> %s\n", 
                        eprintf((u_char *)packet),
                        iprintf((u_char *)packet + 26),
                        b_search((u_char *)packet + 6));
             } else {
-                printf("%s -> %s\n", 
+                fprintf(stdout, "%s -> %s\n", 
                        eprintf((u_char *)packet),
                        b_search((u_char *)packet + 6));
             }
@@ -304,20 +602,31 @@ int main(int argc, char **argv) {
      * 如果执行到这里，说明用户在命令提示符下按下了ctrl-c，
      * 现在是时候输出统计信息了。
      */
+    fprintf(stdout, "\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "Capture Stopped. Statistics:\n");
+    fprintf(stdout, "================================\n");
+    fprintf(stdout, "\n");
+
     struct pcap_stat ps;
     if (pcap_stats(p, &ps) == -1) {
-        fprintf(stderr, "pcap_stats() failed: %s\n", pcap_geterr(p));
+        fprintf(stderr, "Warning: Failed to get packet statistics: %s\n", 
+                pcap_geterr(p));
     } else {
         /*
          * 注意，ps统计信息根据底层架构可能略有不同。
          * 这里我们简化处理。
          */
-        printf("\nPackets received by libpcap:\t%6d\n"
-               "Packets dropped by libpcap:\t%6d\n"
-               "Unique MAC addresses stored:\t%6lu\n",
-               ps.ps_recv, ps.ps_drop, (unsigned long)mac);
+        fprintf(stdout, "  Packet Statistics:\n");
+        fprintf(stdout, "    Received by libpcap: %15d\n", ps.ps_recv);
+        fprintf(stdout, "    Dropped by libpcap:  %15d\n", ps.ps_drop);
+        fprintf(stdout, "\n");
     }
-    
+
+    fprintf(stdout, "  Discovery Statistics:\n");
+    fprintf(stdout, "    Unique MAC addresses: %14lu\n", (unsigned long)mac);
+    fprintf(stdout, "\n");
+
     /*
      * [安全修复] 释放哈希表内存
      * 防止内存泄漏。虽然程序即将退出，操作系统会回收内存，
@@ -327,7 +636,7 @@ int main(int argc, char **argv) {
     ht_free_table(hash_table);
     
     pcap_close(p);
-    return EXIT_SUCCESS;
+    return EXIT_OK;
 }
 
 /*
@@ -751,16 +1060,16 @@ void cleanup(int signo) {
      * [安全修复] 只修改 volatile sig_atomic_t 变量
      * 
      * 原来的代码：
-     *     printf("Interrupt signal caught...\n");  // 不安全！
+     *     fprintf(stdout, "Interrupt signal caught...\n");  // 不安全！
      * 
      * 问题：
-     * printf() 不是异步信号安全函数！
+     * fprintf(stdout, ) 不是异步信号安全函数！
      * 
-     * 为什么不能在信号处理函数中调用 printf()：
-     * 1. printf() 使用缓冲区，可能需要分配内存
-     * 2. 如果信号在 printf() 执行过程中到达，可能会导致死锁
+     * 为什么不能在信号处理函数中调用 fprintf(stdout, )：
+     * 1. fprintf(stdout, ) 使用缓冲区，可能需要分配内存
+     * 2. 如果信号在 fprintf(stdout, ) 执行过程中到达，可能会导致死锁
      * 3. 信号处理函数可以在任何时间、任何上下文中执行
-     * 4. printf() 内部使用的锁可能已经被持有
+     * 4. fprintf(stdout, ) 内部使用的锁可能已经被持有
      * 
      * C标准规定（C11 7.14.1.1）：
      * 信号处理函数只能调用以下函数：
@@ -793,11 +1102,11 @@ void cleanup(int signo) {
      * - timer_gettime(), timer_settime(), times(), umask(), uname()
      * - unlink(), utime(), wait(), waitpid(), write()
      * 
-     * 但注意：printf() 不在列表中！
+     * 但注意：fprintf(stdout, ) 不在列表中！
      * 
      * 修复方案：
      * 1. 只设置 loop = 0（这是安全的，因为 loop 是 volatile sig_atomic_t）
-     * 2. 不要调用 printf() 或其他非异步信号安全函数
+     * 2. 不要调用 fprintf(stdout, ) 或其他非异步信号安全函数
      * 
      * 我们可以在 main() 函数中检测 loop 变为 0 后再输出消息
      */
@@ -806,7 +1115,7 @@ void cleanup(int signo) {
     
     /*
      * [安全注意] 
-     * 原来的 printf() 调用已被移除，因为它不是异步信号安全的
+     * 原来的 fprintf(stdout, ) 调用已被移除，因为它不是异步信号安全的
      * 
      * 如果确实需要在信号处理中输出消息，可以使用 write()：
      * 
