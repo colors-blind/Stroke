@@ -251,9 +251,8 @@ fn list_devices() -> Result<(), ExitCode> {
         if !dev.addresses.is_empty() {
             println!("      Addresses:");
             for addr in &dev.addresses {
-                if let Some(ip) = addr.addr {
-                    println!("        IPv4: {}", ip);
-                }
+                // addr.addr 是 IpAddr 类型，不是 Option
+                println!("        IP: {}", addr.addr);
             }
         }
         println!();
@@ -438,7 +437,8 @@ fn main() -> Result<(), i32> {
     // 选择设备
     let device = if let Some(ref name) = args.interface {
         println!("{}", name);
-        Device::from(name)
+        // Device::from 需要 &str，不是 &String
+        Device::from(name.as_str())
     } else {
         println!("[auto-selecting]");
         let dev = select_default_device()?;
