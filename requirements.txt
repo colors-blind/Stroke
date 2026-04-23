@@ -1,0 +1,2 @@
+# Python依赖库 - 用于update_oui.py脚本
+requests>=2.25.0
