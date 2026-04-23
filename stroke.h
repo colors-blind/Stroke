@@ -34,33 +34,49 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <pcap.h>
 #include <signal.h>
 #include "./oui.h"
- 
-#define SNAPLEN         34
-#define PROMISC         1
-#define TIMEOUT         500
-#define FILTER          ""
-#define HASH_TABLE_SIZE 251     /* needs to be a prime number */
 
-struct table_entry
-{
-    u_char mac[6];              /* holds the MAC address */
-    struct table_entry *next;   /* pointer to the next entry */
+/* 捕获的数据包最大长度 */
+#define SNAPLEN         34
+/* 混杂模式 */
+#define PROMISC         1
+/* 超时时间(毫秒) */
+#define TIMEOUT         500
+/* BPF过滤器表达式 */
+#define FILTER          ""
+/* 哈希表大小(必须为素数) */
+#define HASH_TABLE_SIZE 251
+
+/* 哈希表条目结构 */
+struct table_entry {
+    u_char mac[6];              /* 存储MAC地址 */
+    struct table_entry *next;   /* 指向链表中下一个条目 */
 };
- 
+
+/* 二分查找OUI表 */
 const char *b_search(u_char *);
+/* 格式化MAC地址为字符串 */
 char *eprintf(u_char *);
+/* 格式化IP地址为字符串 */
 char *iprintf(u_char *);
+/* 检查MAC地址是否已存在 */
 int interesting(u_char *, struct table_entry **);
+/* 检查重复MAC地址 */
 int ht_dup_check(u_char *, struct table_entry **, int);
+/* 添加哈希表条目 */
 int ht_add_entry(u_char *, struct table_entry **, int);
+/* 计算哈希值 */
 u_long ht_hash(u_char *);
+/* 初始化哈希表 */
 void ht_init_table(struct table_entry **);
+/* 清理函数 */
 void cleanup(int);
-int catch_sig(int, void(*)());
+/* 信号捕获函数 */
+int catch_sig(int, void(*handler)(int));
 
 /* EOF */
